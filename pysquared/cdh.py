@@ -3,6 +3,7 @@ import time
 
 import alarm
 import microcontroller
+
 from alarm import time as alarmTime
 
 from .config.config import Config
@@ -10,6 +11,12 @@ from .hardware.radio.modulation import FSK
 from .logger import Logger
 from .protos.radio import RadioProto
 from .satellite import Satellite
+
+#camera libraries
+import board
+import sdioio
+import storage
+import camera
 
 
 class CommandDataHandler:
@@ -34,6 +41,7 @@ class CommandDataHandler:
             b"\x96\xa2": "exec_cmd",
             b"\xa5\xb4": "joke_reply",
             b"\x56\xc4": "FSK",
+            b"\xca\x54": "take_picture",
         }
         self._joke_reply: list[str] = config.joke_reply
         self._super_secret_code: bytes = config.super_secret_code.encode("utf-8")
@@ -42,6 +50,8 @@ class CommandDataHandler:
             "The satellite has a super secret code!",
             super_secret_code=str(self._super_secret_code),
         )
+
+        self._cam = camera.Camera()
 
     ############### message handler ###############
     def message_handler(self, cubesat: Satellite, msg: bytes) -> None:
@@ -102,6 +112,13 @@ class CommandDataHandler:
             self._log.info("bad code?")
 
     ########### commands without arguments ###########
+
+    def take_picture(self, cubesat: Satellite) -> None:
+        self._log.info("Taking photo...")
+        buffer = bytearray(512 * 1024)
+        size = self._cam.take_picture(buffer, width=1920, height=1080, format=camera.ImageFormat.JPG)
+        self._radio.send(buffer)
+        
     def noop(self) -> None:
         self._log.info("no-op")
 
@@ -165,3 +182,33 @@ class CommandDataHandler:
     def exec_cmd(self, cubesat: Satellite, args: str) -> None:
         self._log.info("Executing command", args=args)
         exec(args)
+
+
+
+'''import board
+import sdioio
+import storage
+#import camera
+
+# Initialize SD card storage
+sd = sdioio.SDCard(
+    clock=board.SDIO_CLOCK,
+    command=board.SDIO_COMMAND,
+    data=board.SDIO_DATA,
+    frequency=25000000)
+vfs = storage.VfsFat(sd)
+storage.mount(vfs, '/sd')
+
+# Set up camera, assign picture attributes, and take picture
+# Write picture data to file `buffer`.
+cam = camera.Camera()
+
+buffer = bytearray(512 * 1024)
+file = open("/sd/image3.jpg","wb")
+size = cam.take_picture(buffer, width=1920, height=1080, format=camera.ImageFormat.JPG)
+file.write(buffer, size)
+file.close()
+
+with open("/sd/test.txt", "w") as f:
+    f.write("Hello world!\r\n") # type: ignore
+'''
